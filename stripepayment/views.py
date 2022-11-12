@@ -1,15 +1,53 @@
 from .models import Product, OrderDetail
-from django.http.response import HttpResponseNotFound, JsonResponse
 import stripe
-import json
 from django.conf import settings
 from django.views.generic import ListView, DetailView
 from django.views.decorators.csrf import csrf_exempt
-from django.http.response import HttpResponseNotFound, JsonResponse
-from django.shortcuts import get_object_or_404, render
-from django.urls import reverse, reverse_lazy
-from django.shortcuts import redirect
-# Create your views here.
+from django.http.response import JsonResponse
+from django.shortcuts import get_object_or_404
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .serializer import ProductSerializer
+
+
+class ProductAPIView(APIView):
+    def get(self, request, id=None):
+        if id is not None:
+            product = Product.objects.get(pk=id)
+            serializer = ProductSerializer(product)
+            return Response(serializer.data)
+        else:
+            product = Product.objects.all()
+            serializer = ProductSerializer(product, many=True)
+            return Response(serializer.data)
+
+    def post(self, request, id=None):
+        product = get_object_or_404(Product, pk=id)
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        session = stripe.checkout.Session.create(
+                          success_url=YOUR_DOMAIN,
+                          cancel_url=YOUR_DOMAIN,
+                          line_items=[
+                              {
+                                'price_data': {
+                                    'currency': 'inr',
+                                    'product_data': {
+                                            'name': product.name,
+                                                    },
+                                    'unit_amount': int(product.price * 100),
+                                              },
+                                'quantity': 1,
+                              }
+                            ],
+                          mode='payment',
+                        )
+
+
+        print("------------------------")
+        print(session.url)
+        print("------------------------")
+        return Response(session)
+
 
 class ProductView(ListView):
     model = Product
@@ -32,20 +70,23 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 YOUR_DOMAIN = 'http://localhost:8000'
 @csrf_exempt
 def create_checkout_session(request):
-    #request_data = json.loads(request.body)
     product = get_object_or_404(Product, pk=9)
     stripe.api_key = settings.STRIPE_SECRET_KEY
-    session = stripe.PaymentIntent.create(
-                          amount=int(product.price * 100),
-                          currency="inr",
-                          automatic_payment_methods={"enabled": False},
-                                        )
-    # OrderDetail.product = product.id
-    # OrderDetail.amount = product.price
-    # OrderDetail.has_paid = 'True'
-    # OrderDetail.save()
-    # print(OrderDetail.objects.get(id=product.id))
-
-    print(session)
+    session = stripe.checkout.Session.create(
+                          success_url=YOUR_DOMAIN,
+                          cancel_url=YOUR_DOMAIN,
+                          line_items=[
+                              {
+                                'price_data': {
+                                    'currency': 'inr',
+                                    'product_data': {
+                                            'name': product.name,
+                                                    },
+                                    'unit_amount': int(product.price * 100),
+                                              },
+                                'quantity': 1,
+                              }
+                            ],
+                          mode='payment',
+                        )
     return JsonResponse(session)
-
